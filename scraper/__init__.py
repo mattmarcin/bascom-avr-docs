@@ -1,1 +1,0 @@
-# BASCOM-AVR Documentation Scraper

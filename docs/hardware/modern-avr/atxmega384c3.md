@@ -1,3 +1,0 @@
-# ATXMEGA384C3
-
-![ATXMEGA384C3](atxmega384c3.png)
