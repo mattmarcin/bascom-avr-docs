@@ -111,6 +111,91 @@ def regenerate_llms_from_files(docs_dir: Path) -> str:
     return content
 
 
+def generate_context7_files(docs_dir: Path, context7_dir: Path) -> None:
+    """Generate combined markdown files per category for context7."""
+    context7_dir.mkdir(parents=True, exist_ok=True)
+
+    # Collect all markdown files by category
+    categories = {}
+    for md_file in docs_dir.rglob("*.md"):
+        rel_path = md_file.relative_to(docs_dir)
+        parts = rel_path.parts
+
+        # Determine category
+        if len(parts) == 1:
+            category = "commands"
+        elif len(parts) == 2:
+            category = parts[0]
+        else:
+            # Flatten nested like libraries/lcd -> libraries-lcd
+            category = "-".join(parts[:-1])
+
+        try:
+            content = md_file.read_text(encoding='utf-8')
+            title = extract_title(content, md_file.stem)
+        except Exception:
+            content = ""
+            title = md_file.stem.replace('_', ' ').title()
+
+        if category not in categories:
+            categories[category] = []
+        categories[category].append({
+            'title': title,
+            'content': content,
+            'filename': md_file.stem,
+        })
+
+    # Sort pages within each category by title
+    for cat in categories:
+        categories[cat].sort(key=lambda p: p['title'].lower())
+
+    # Category display names and descriptions
+    category_info = {
+        "commands": ("BASCOM-AVR Commands", "Language commands, statements, functions, and chip-specific documentation"),
+        "configuration": ("Configuration Directives", "CONFIG directives for hardware initialization"),
+        "directives": ("Compiler Directives", "Compiler directives ($) for build configuration"),
+        "hardware": ("AVR Hardware", "AVR internal hardware documentation"),
+        "hardware-modern-avr": ("Modern AVR Hardware", "XMEGA, xTiny, MegaX, and AVR-Dx series documentation"),
+        "ide": ("IDE Reference", "IDE menus, options, and tools"),
+        "libraries-lcd": ("LCD Libraries", "Text and graphical LCD display libraries"),
+        "libraries-i2c": ("I2C Libraries", "I2C/TWI communication protocol"),
+        "libraries-spi": ("SPI Libraries", "SPI communication protocol"),
+        "libraries-1wire": ("1-Wire Libraries", "Dallas 1-Wire protocol"),
+        "libraries-tcpip": ("TCP/IP Libraries", "TCP/IP networking with W5100/W5500"),
+        "libraries-usb": ("USB Libraries", "USB communication"),
+        "libraries-can": ("CAN Libraries", "CAN bus communication"),
+        "libraries-rainbow": ("Rainbow Libraries", "WS2812 RGB LED control"),
+        "libraries-ft800": ("FT800 Libraries", "FT800/FT810 GPU display controller"),
+        "libraries-remote-control": ("Remote Control Libraries", "RC5/RC6 infrared remote control"),
+    }
+
+    # Write combined file for each category
+    for category, pages in categories.items():
+        info = category_info.get(category, (category.replace("-", " ").title(), ""))
+        title, description = info
+
+        lines = [f"# {title}", ""]
+        if description:
+            lines.append(f"> {description}")
+            lines.append("")
+
+        for page in pages:
+            # Add each page's content with H2 header
+            lines.append(f"## {page['title']}")
+            lines.append("")
+            # Strip the H1 from individual page content to avoid duplicate headers
+            content = page['content']
+            content = re.sub(r'^#\s+.+\n*', '', content, count=1)
+            lines.append(content.strip())
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        output_file = context7_dir / f"{category}.md"
+        output_file.write_text("\n".join(lines), encoding="utf-8")
+        logger.info(f"  Created {output_file.name} ({len(pages)} pages)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Scrape BASCOM-AVR documentation and convert to Markdown"
@@ -147,6 +232,11 @@ def main():
         action="store_true",
         help="Only regenerate llms.txt from existing markdown files"
     )
+    parser.add_argument(
+        "--generate-context7",
+        action="store_true",
+        help="Generate combined markdown files for context7 in context7/ folder"
+    )
 
     args = parser.parse_args()
 
@@ -161,6 +251,14 @@ def main():
         logger.info("Regenerating llms.txt from existing markdown files...")
         regenerate_llms_from_files(output_dir)
         logger.info(f"llms.txt regenerated at: {output_dir / 'llms.txt'}")
+        return 0
+
+    # Handle --generate-context7 mode
+    if args.generate_context7:
+        context7_dir = output_dir.parent / "context7"
+        logger.info(f"Generating context7 files from {output_dir}...")
+        generate_context7_files(output_dir, context7_dir)
+        logger.info(f"Context7 files created in: {context7_dir}")
         return 0
 
     logger.info("=" * 60)
